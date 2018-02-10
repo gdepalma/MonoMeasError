@@ -34,20 +34,19 @@ getIsplineC=function(xtrue,knotseq,bases){
 
 
 
-genData=function(type){
-  nobs=800
-  xcens=rep(0,nobs)
-  ycens=rep(0,nobs)
+genData=function(type,nobs=200,sigma2=2){
+  
+  nobs=200
   
   popmn=c(-4.6,-2,1); popstd=c(1.1,1.5,1.5); popprob=c(.6,.2,.2)
 #   popmn=c(-4,0,4); popstd=c(.7,.7,.7); popprob=c(1/3,1/3,1/3)
 #   popmn=c(-6,-3,3); popstd=c(1.5,1.5,.7); popprob=c(.6,.3,.1)
 #   popmn=c(-3,0,3); popstd=c(1,1,1); popprob=c(.5,.3,.2)
-  xtrue=rnormmix(n=nobs,lambda=popprob,mu=popmn,sigma=popstd)
+  xobs=rnormmix(n=nobs,lambda=popprob,mu=popmn,sigma=popstd)
+  xtrue=xobs
   
   ### X
-  xobs=ceiling(xtrue+rnorm(nobs,0,xsig))
-  xgrid=seq(min(xobs)-3.5,max(xobs)+2.5,length=1200)
+  xgrid=seq(min(xobs),max(xobs),length=1000)
   
   ## Y
   
@@ -100,28 +99,12 @@ genData=function(type){
            exp(coef[4]*(coef[2]-xgrid)))
   }
   
-  yobs=round(ytrue+rnorm(nobs,0,ysig))
+  yobs=ytrue+rnorm(nobs,0,sigma2)
   
-  return(list(xobs=xobs,yobs=as.numeric(yobs),xcens=xcens,ycens=ycens,true=true,xtrue=xtrue))
+  return(list(xobs=xobs,yobs=as.numeric(yobs),true=true,xtrue=xtrue,xgrid=xgrid))
 }
 
-# plot(xtrue,ytrue)
-
-
-# ###Get MIC Results
-# M1Test=-1; M2Test=1
-# dens=numeric(length(xgrid))
-# # xsig=sqrt(.5^2+.5^)2
-# # ysig=sqrt(1.5^2+1.5^2)
-# for(i in 1:length(xgrid))
-#   dens[i]=sum(popprob*dnorm(xgrid[i],popmn,popstd))
-# weights=dens/sum(dens)
-# parms=findDIAC(yobs,xgrid,weights,true,M1Test,M2Test,xsig,ysig,3,20)
-# print(parms)
-# trueD1=parms[[1]]
-# trueD2=parms[[2]]
-
-
-
-              
-              
+parms=genData(1)
+xobs=parms$xobs; yobs=parms$yobs; xgrid=parms$xgrid
+sigma2=3
+y_mu=yobs 

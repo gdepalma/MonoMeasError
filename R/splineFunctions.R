@@ -1,18 +1,17 @@
 
 
-getLLK=function(xobs,yobs,x_est,y_est,xsig,sigma2){
+getLLK=function(yobs,y_mu,sigma2){
   
-  xllk <- pnorm(xobs,x_est,xsig,log=TRUE)
-  yllk <- pnorm(yobs,y_est,sqrt(sigma2),log=TRUE)
+  yllk <- pnorm(yobs,y_mu,sqrt(sigma2),log=TRUE)
   
-  llike <- xllk+yllk
+  llike <- yllk
   
   return(llike)
 }
 
 PriorLLK=function(coefs,smoothParam,sigma2){
   
-  priorSmooth=dunif(smoothParam,0,2,log=T)
+  priorSmooth=dunif(smoothParam,0,6,log=T)
   
   lpriorcoef = dlnorm(coefs[length(coefs)],1,100,log=T)
   for(i in (length(coefs)-1):1)
@@ -25,13 +24,13 @@ PriorLLK=function(coefs,smoothParam,sigma2){
 
 
 
-findInitialSpline=function(x_est,bases,knotseq,yobs,designMatrix){
+findInitialSpline=function(xobs,bases,knotseq,yobs,designMatrix){
 
   min=999999
   for(i in seq(.5,7,by=.1)){
     coefs=seq(.1,i,length=ncol(designMatrix))
-    y_est=coefs%*%t(designMatrix)
-    if(sum(abs(yobs-y_est))<min){ min=sum(abs(yobs-y_est)); save=i}
+    y_mu=coefs%*%t(designMatrix)
+    if(sum(abs(yobs-y_mu))<min){ min=sum(abs(yobs-y_mu)); save=i}
   }
   coef=seq(.1,save,length=ncol(designMatrix))
   return(coef)
@@ -71,28 +70,9 @@ getIsplineC=function(x_est,knotseq,bases){
 }
 
 
-updateX=function(x_est,y_est,knotseq,bases,lowept,upperept,
-                           coefs,xsig,sigma2,xobs,yobs,nobs){
-
-    px_est = x_est + rnorm(nobs,0,.5)
-    px_est[px_est<lowept] = lowept+.01
-    px_est[px_est>upperept] = upperept-.01
-    designMatrix=getIsplineC(px_est,knotseq,bases)
-    py_est=as.numeric(coefs%*%t(designMatrix))
-    llike=getLLK(xobs,yobs,px_est,y_est,xsig,sigma2)
-    llike[is.na(llike)]=-99
-    mhrat = runif(nobs)
-    cond1=log(mhrat)<llike
-    x_est[cond1]=px_est[cond1]
-    designMatrix=getIsplineC(x_est,knotseq,bases)
-    y_est=coefs%*%t(designMatrix)
-
-  return(list(x_est=x_est,y_est=y_est))
-
-}
 
 
-updateCoefs=function(smoothParam,coefs,iter,bases,x_est,y_est,knotseq,xobs,yobs,xsig,sigma2,coefMat){
+updateCoefs=function(smoothParam,coefs,iter,bases,y_mu,knotseq,xobs,yobs,sigma2,coefMat){
 
   if(iter<1000){
     Sigma=diag(.001,nrow=ncol(coefMat),ncol=ncol(coefMat))
@@ -105,24 +85,24 @@ updateCoefs=function(smoothParam,coefs,iter,bases,x_est,y_est,knotseq,xobs,yobs,
           sigma=diag(.001,nrow=nrow(bases),ncol=nrow(bases)))))})
 
   accept=0
-  designMatrix=getIsplineC(x_est,knotseq,bases)
+  designMatrix=getIsplineC(xobs,knotseq,bases)
   newY=propCoef%*%t(designMatrix)
 
   #log likelihood and priors
-  oldLLK=sum(getLLK(xobs,yobs,x_est,y_est,xsig,sigma2))
-  oldPRIORLLK=sum(getPRIORLLK_spline(coefs,smoothParam,sigma2))
-  newLLK=sum(getLLK(xobs,yobs,x_est,newY,xcens,ycens,xsig,sigma2))
-  newPRIORLLK=sum(getPRIORLLK_spline(propCoef,smoothParam,sigma2)
+  oldLLK=sum(getLLK(yobs,y_mu,sigma2))
+  oldPRIORLLK=sum(PriorLLK(coefs,smoothParam,sigma2))
+  newLLK=sum(getLLK(yobs,y_mu,sigma2))
+  newPRIORLLK=sum(PriorLLK(propCoef,smoothParam,sigma2))
 
   #accept/reject
   A=newLLK+newPRIORLLK-oldLLK-oldPRIORLLK
   if(is.nan(A)==FALSE & log(runif(1)) < A){
-    y_est=newY
+    y_mu=newY
     coefs=propCoef
     accept=1
   }
 
-  return(list(acceptCoef=accept,coefs=coefs,y_est=y_est))
+  return(list(acceptCoef=accept,coefs=coefs,y_mu=y_mu))
 
 }
 
@@ -130,10 +110,10 @@ updateSmoothParm=function(smoothParam,coefs){
 
   accept=0
   propSmooth=rnorm(1,smoothParam,.2)
-  if(propSmooth<0 | propSmooth>2)
+  if(propSmooth<0 | propSmooth>6)
     return(list(smooth=smoothParam,accept=accept))
-  oldPRIORLLK=sum(getPRIORLLK_spline(coefs,smoothParam,sigma2))
-  newPRIORLLK=sum(getPRIORLLK_spline(coefs,propSmooth,sigma2))
+  oldPRIORLLK=sum(PriorLLK(coefs,smoothParam,sigma2))
+  newPRIORLLK=sum(PriorLLK(coefs,propSmooth,sigma2))
   #accept/reject
   if(log(runif(1)) < newPRIORLLK-oldPRIORLLK){
     smoothParam=propSmooth
@@ -143,17 +123,17 @@ updateSmoothParm=function(smoothParam,coefs){
   return(list(smooth=smoothParam,accept=accept))
 }
 
-updateVariance=function(xobs,yobs,x_est,y_est,xsig,sigma2,smoothParam,coefs){
+updateVariance=function(xobs,yobs,x_est,y_mu,xsig,sigma2,smoothParam,coefs){
   
   accept=0
   propSigma2=rnorm(1,sigma2,.2)
   if(propSigma2<0)
     return(sigma2)
   #log likelihood and priors
-  oldLLK=sum(getLLK(xobs,yobs,x_est,y_est,xsig,sigma2))
-  oldPRIORLLK=sum(getPRIORLLK_spline(coefs,smoothParam,sigma2))
-  newLLK=sum(getLLK(xobs,yobs,x_est,y_est,xcens,ycens,xsig,propSigma2))
-  newPRIORLLK=sum(getPRIORLLK_spline(propCoef,smoothParam,sigma2)
+  oldLLK=sum(getLLK(yobs,y_mu,sigma2))
+  oldPRIORLLK=sum(PriorLLK(coefs,smoothParam,sigma2))
+  newLLK=sum(getLLK(xobs,y_mu,propSigma2))
+  newPRIORLLK=sum(PriorLLK(coefs,smoothParam,propSigma2))
                   
   #accept/reject
   A=newLLK+newPRIORLLK-oldLLK-oldPRIORLLK

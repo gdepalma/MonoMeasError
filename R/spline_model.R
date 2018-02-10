@@ -1,7 +1,8 @@
-fitSplineMon=function(xobs,yobs,coefs,x_est,y_est,xgrid,lowept,upperept,knotseq,bases,designMatrixGrid,
+fitSplineMon=function(xobs,yobs,coefs,x_est,y_mu,xgrid,lowept,upperept,knotseq,bases,designMatrixGrid,
                                     xsig=1,numIter=22000,burnin=14000,thin=4){
 
-
+  numIter=10000
+  burnin=2000
   fitMat=matrix(nrow=numIter-burnin,ncol=length(xgrid))
   coefMat=matrix(nrow=numIter,ncol=length(coefs))
   sigma2_save=rep(NA,numIter)
@@ -9,21 +10,21 @@ fitSplineMon=function(xobs,yobs,coefs,x_est,y_est,xgrid,lowept,upperept,knotseq,
   
   nobs=length(xobs)
 
-  smoothParam=1
+  smoothParam=2
+  
+  begin=Sys.time()
 
 
   for(iter in 1:numIter){
 
-
-    ### Update x_est (and corresponding y_est)
-    parms=updateX(x_est,y_est,knotseq,bases,lowept,upperept,coefs,xsig,ysig,xobs,yobs,nobs)
-    x_est=parms$x_est; y_est=as.numeric(parms$y_est)
-
+    if(iter %% 500==0){
+      cat('iter: ',iter,'\n')
+      cat(Sys.time()-being,'\n')
+    }
     
     ### Update Coefs
-    parms=updateSplineCoefs(smoothParam,coefs,iter,bases,x_est,
-                            y_est,knotseq,xobs,yobs,xcens,ycens,xsig,ysig,coefMat)
-    coefs=parms$coefs; y_est=as.numeric(parms$y_est)
+    parms=updateCoefs(smoothParam,coefs,iter,bases,y_mu,knotseq,xobs,yobs,sigma2,coefMat)
+    coefs=parms$coefs; y_mu=as.numeric(parms$y_mu)
 
 
     ### Update smoothness parameter
@@ -31,7 +32,7 @@ fitSplineMon=function(xobs,yobs,coefs,x_est,y_est,xgrid,lowept,upperept,knotseq,
     smoothParam=parms$smooth
     
     ### Update error variance
-    sigma2=(xobs,yobs,x_est,y_est,xsig,sigma2,smoothParam,coefs)
+    sigma2=updateVariance(xobs,yobs,y_mu,sigma2,smoothParam,coefs)
 
     # smoothParam_sav[iter]=smoothParam
     coefMat[iter,]=log(coefs)
@@ -49,6 +50,7 @@ fitSplineMon=function(xobs,yobs,coefs,x_est,y_est,xgrid,lowept,upperept,knotseq,
   return(list(MICDens=MICDens,fitMat=fitMat))
 
 }
+
 
 
 
